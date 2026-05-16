@@ -34,9 +34,9 @@ public class FinalApp extends Application {
     // variables de archivos
     private File activeFile;
     private byte[] activeFileBytes;
-    private byte[] originalFileBytes; // for comparison when decoding without correction
-    
-    // Huffman specific state
+    private byte[] originalFileBytes; // para comparación cuando NO corrige errores
+
+    // Variables de estado para Huffman
     private File currentCompressedFile;
     private File currentDecompressedFile;
     
