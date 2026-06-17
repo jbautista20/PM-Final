@@ -61,7 +61,7 @@ public class FinalApp extends Application {
         VBox topContainer = new VBox(10, topMenu, toolbarContainer);
         root.setTop(topContainer);
         
-        // Text areas for comparison
+        // Text areas
         ScrollPane leftScroll = new ScrollPane(leftTextFlow);
         leftScroll.setFitToWidth(true);
         VBox leftBox = new VBox(new Label("Archivo Original / Referencia"), leftScroll);
@@ -93,7 +93,7 @@ public class FinalApp extends Application {
         setupHuffmanToolbar();
     }
     
-    // --- Huffman Toolbar Setup ---
+    // --- Huffman Toolbar ---
     private void setupHuffmanToolbar() {
         toolbarContainer.getChildren().clear();
         Button btnLoad = new Button("Subir Archivo");
@@ -111,7 +111,7 @@ public class FinalApp extends Application {
         clearPanels();
     }
     
-    // --- Hamming Toolbar Prompts ---
+    // --- Hamming Toolbar ---
     private void promptHammingMode() {
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION);
         alert.setTitle("Selección de Operación");
@@ -174,7 +174,7 @@ public class FinalApp extends Application {
         clearPanels();
     }
     
-    // --- File Loading Logic ---
+    // --- Subir Archivo ---
     private void loadFileHuffman() {
         FileChooser fc = new FileChooser();
         File f = fc.showOpenDialog(mainStage);
@@ -199,8 +199,7 @@ public class FinalApp extends Application {
         if (f != null) {
             try {
                 byte[] tempBytes = Files.readAllBytes(f.toPath());
-                
-                // If decoding and it's encrypted, try to decrypt first
+                // Si decodifico y el archivo esta encriptado, primero desencriptar
                 if (isDecoding && f.getName().endsWith(".enc")) {
                     try {
                         tempBytes = CryptoTimeHelper.unpackTimeLock(tempBytes);
@@ -216,9 +215,7 @@ public class FinalApp extends Application {
                 activeFile = f;
                 activeFileBytes = tempBytes;
                 
-                if (f.getName().endsWith(".txt")) {
-                    originalFileBytes = activeFileBytes.clone();
-                }
+                originalFileBytes = activeFileBytes.clone();
                 
                 updatePanel(leftTextFlow, activeFileBytes, null);
                 rightTextFlow.getChildren().clear();
@@ -231,7 +228,7 @@ public class FinalApp extends Application {
         }
     }
     
-    // --- Huffman Operations ---
+    // --- Operaciones Huffman ---
     private void compressFile() {
         if (activeFile == null) {
             showStatus("Cargue un archivo primero.", true); return;
@@ -304,7 +301,7 @@ public class FinalApp extends Application {
         alert.showAndWait();
     }
     
-    // --- Hamming Operations ---
+    // --- Operaciones Hamming ---
     private int extractN(String choice) {
         if (choice.startsWith("8")) return 8;
         if (choice.startsWith("1024")) return 1024;
@@ -319,24 +316,24 @@ public class FinalApp extends Application {
     }
     
     private void encodeAndProtectFile(String blockStr, String errorStr) {
-        if (activeFileBytes == null || !activeFile.getName().endsWith(".txt")) {
-            showStatus("Debe cargar un archivo original (.txt) para protegerlo.", true);
+        if (activeFileBytes == null) {
+            showStatus("Debe cargar un archivo original para protegerlo.", true);
             return;
         }
         try {
             int N = extractN(blockStr);
             int maxErrs = extractErrors(errorStr);
             
-            // Protect
+            // Proteger
             byte[] protectedBytes = HammingCodec.protect(activeFileBytes, N);
             
-            // Inject Errors
+            // Insertar Errores
             byte[] finalBytes = HammingCodec.introduceErrors(protectedBytes, N, maxErrs);
             
             int infoBits = activeFileBytes.length * 8;
             int numBlocks = (BitManipulator.unpackBits(protectedBytes, protectedBytes.length * 8).length) / N;
             
-            // Ask for Encryption
+            // Encriptar
             Alert encAlert = new Alert(Alert.AlertType.CONFIRMATION);
             encAlert.setTitle("Encriptación");
             encAlert.setHeaderText("¿Desea encriptar el archivo por fecha?");
@@ -373,8 +370,9 @@ public class FinalApp extends Application {
                 }
             }
             
-            String ext = isEncrypted ? ".enc" : (N == 8 ? ".HA1" : (N == 1024 ? ".HA2" : ".HA3"));
-            File outFile = new File(activeFile.getParent(), activeFile.getName().replace(".txt", "") + ext);
+            String ext = isEncrypted ? ".enc" : (maxErrs > 0 ? ".HE" : ".HA");
+            String suffix = (N == 8 ? "_N8" : (N == 1024 ? "_N1024" : "_N16384"));
+            File outFile = new File(activeFile.getParent(), activeFile.getName() + suffix + ext);
             Files.write(outFile.toPath(), finalBytes);
             
             updatePanel(rightTextFlow, finalBytes, null);
@@ -411,8 +409,8 @@ public class FinalApp extends Application {
         }
         try {
             int N = 8;
-            if (activeFile.getName().contains("2")) N = 1024;
-            if (activeFile.getName().contains("3")) N = 16384;
+            if (activeFile.getName().contains("_N1024") || activeFile.getName().contains("2")) N = 1024;
+            if (activeFile.getName().contains("_N16384") || activeFile.getName().contains("3")) N = 16384;
             
             byte[] resultBytes = HammingCodec.unprotect(activeFileBytes, N, correctErrors);
             
@@ -424,8 +422,23 @@ public class FinalApp extends Application {
                 alert.showAndWait();
             }
             
-            String extOriginal = correctErrors ? "_DC.txt" : "_DE.txt";
-            File outFile = new File(activeFile.getParent(), activeFile.getName().substring(0, activeFile.getName().lastIndexOf(".")) + extOriginal);
+            String name = activeFile.getName();
+            if (name.endsWith(".HE")) name = name.substring(0, name.length() - 3);
+            else if (name.endsWith(".HA")) name = name.substring(0, name.length() - 3);
+            else if (name.endsWith(".enc")) name = name.substring(0, name.length() - 4);
+            
+            if (name.endsWith("_N8")) name = name.substring(0, name.length() - 3);
+            else if (name.endsWith("_N1024")) name = name.substring(0, name.length() - 6);
+            else if (name.endsWith("_N16384")) name = name.substring(0, name.length() - 7);
+            
+            String suffixOriginal = correctErrors ? "_DC" : "_DE";
+            int dotIdx = name.lastIndexOf('.');
+            if (dotIdx != -1) {
+                name = name.substring(0, dotIdx) + suffixOriginal + name.substring(dotIdx);
+            } else {
+                name = name + suffixOriginal;
+            }
+            File outFile = new File(activeFile.getParent(), name);
             Files.write(outFile.toPath(), resultBytes);
             
             if (!correctErrors && originalFileBytes != null) {
@@ -451,25 +464,36 @@ public class FinalApp extends Application {
     
     private void updatePanel(TextFlow panel, byte[] data, byte[] reference) {
         panel.getChildren().clear();
-        int limit = Math.min(data.length, 50000); // Prevent UI freeze
+        int byteLimit = Math.min(data.length, 6250); // limit to ~50k bits (para que no se cuelgue)
         
-        for (int i = 0; i < limit; i++) {
-            char curr = (char) (data[i] & 0xFF);
-            char ref = (reference != null && i < reference.length) ? (char) (reference[i] & 0xFF) : curr;
+        for (int i = 0; i < byteLimit; i++) {
+            byte currByte = data[i];
+            byte refByte = (reference != null && i < reference.length) ? reference[i] : currByte;
             
-            Text t = new Text(String.valueOf(curr));
-            t.setFont(Font.font("Monospaced", 14));
-            if (reference != null && curr != ref) {
-                t.setFill(Color.RED);
-                t.setStyle("-fx-font-weight: bold;");
-            } else {
-                t.setFill(Color.NAVY);
+            for (int b = 7; b >= 0; b--) {
+                int currBit = (currByte >> b) & 1;
+                int refBit = (refByte >> b) & 1;
+                
+                Text t = new Text(String.valueOf(currBit));
+                t.setFont(Font.font("Monospaced", 14));
+                if (reference != null && currBit != refBit) {
+                    t.setFill(Color.RED);
+                    t.setStyle("-fx-font-weight: bold;");
+                } else {
+                    t.setFill(Color.NAVY);
+                }
+                panel.getChildren().add(t);
             }
-            panel.getChildren().add(t);
+            
+            if ((i + 1) % 8 == 0) {
+                 panel.getChildren().add(new Text("\n"));
+            } else {
+                 panel.getChildren().add(new Text(" "));
+            }
         }
         
-        if (data.length > limit) {
-            Text truncateMsg = new Text("\n... [Archivo demasiado grande, mostrando los primeros " + limit + " bytes]");
+        if (data.length > byteLimit) {
+            Text truncateMsg = new Text("\n... [Archivo demasiado grande, mostrando los primeros " + byteLimit + " bytes en formato binario]");
             truncateMsg.setFont(Font.font("Monospaced", 14));
             truncateMsg.setFill(Color.RED);
             panel.getChildren().add(truncateMsg);
